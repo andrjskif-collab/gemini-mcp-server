@@ -1,0 +1,17 @@
+{
+  "name": "gemini-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP-сервер для генерации изображений через Gemini API, для подключения к Claude как кастомный коннектор",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "express": "^4.19.2",
+    "zod": "^3.23.8"
+  }
+}
