@@ -27,7 +27,7 @@ async function tryHuggingFace(prompt) {
   }
 
   const resp = await fetch(
-    "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
+    "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell",
     {
       method: "POST",
       headers: {
