@@ -1,11 +1,11 @@
-// MCP-сервер, который даёт Claude инструмент "generate_image",
-// внутри вызывающий Gemini API для генерации картинок.
+// MCP-сервер, который даёт Claude инструмент "generate_image".
+// Генерация идёт через Pollinations.ai (модель Flux) — бесплатно,
+// без API-ключа и без общего лимита запросов.
 //
 // Запускается как обычный веб-сервер (Express) и слушает порт из
-// переменной окружения PORT (bothost.ru сам её задаёт).
+// переменной окружения PORT.
 //
-// Требуется переменная окружения GEMINI_API_KEY — ваш бесплатный
-// ключ с https://aistudio.google.com/apikey
+// Никаких переменных окружения задавать не нужно.
 
 const express = require("express");
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
@@ -14,68 +14,45 @@ const {
 } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const { z } = require("zod");
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// Модель для генерации изображений. Если Google переименует модель,
-// поменяйте значение тут или через переменную окружения GEMINI_IMAGE_MODEL.
-// Актуальное имя всегда можно проверить на https://ai.google.dev/gemini-api/docs/image-generation
-const GEMINI_IMAGE_MODEL =
-  process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
-
-if (!GEMINI_API_KEY) {
-  console.error("ОШИБКА: не задана переменная окружения GEMINI_API_KEY");
-}
-
 async function generateImage(prompt) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const encodedPrompt = encodeURIComponent(prompt);
+  const seed = Math.floor(Math.random() * 1000000);
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=1024&height=1024&nologo=true&seed=${seed}`;
 
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
-    }),
-  });
+  const resp = await fetch(url);
 
   if (!resp.ok) {
-    const errText = await resp.text();
-    throw new Error(`Gemini API вернул ошибку ${resp.status}: ${errText}`);
-  }
-
-  const data = await resp.json();
-  const parts = data?.candidates?.[0]?.content?.parts || [];
-  const imagePart = parts.find((p) => p.inlineData);
-
-  if (!imagePart) {
-    const textPart = parts.find((p) => p.text);
+    const errText = await resp.text().catch(() => "");
     throw new Error(
-      "Gemini не вернул изображение. Ответ модели: " +
-        (textPart?.text || JSON.stringify(data))
+      `Pollinations.ai вернул ошибку ${resp.status}: ${errText}`
     );
   }
 
-  return {
-    mimeType: imagePart.inlineData.mimeType || "image/png",
-    base64: imagePart.inlineData.data,
-  };
+  const arrayBuffer = await resp.arrayBuffer();
+  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  const mimeType = resp.headers.get("content-type") || "image/jpeg";
+
+  return { mimeType, base64 };
 }
 
 function buildServer() {
   const server = new McpServer({
-    name: "gemini-image-generator",
+    name: "pollinations-image-generator",
     version: "1.0.0",
   });
 
   server.registerTool(
     "generate_image",
     {
-      title: "Сгенерировать изображение через Gemini",
+      title: "Сгенерировать изображение (Pollinations.ai)",
       description:
-        "Генерирует изображение по текстовому описанию с помощью Gemini (Nano Banana).",
+        "Генерирует изображение по текстовому описанию с помощью Pollinations.ai (модель Flux). Бесплатно, без ключа.",
       inputSchema: {
         prompt: z
           .string()
-          .describe("Подробное описание картинки на русском или английском"),
+          .describe(
+            "Подробное описание картинки, лучше на английском для лучшего качества"
+          ),
       },
     },
     async ({ prompt }) => {
@@ -98,8 +75,6 @@ function buildServer() {
 const app = express();
 app.use(express.json());
 
-// Один MCP-эндпоинт, без сохранения состояния между запросами —
-// самый простой и надёжный вариант для хостинга вроде bothost.ru.
 app.post("/mcp", async (req, res) => {
   try {
     const server = buildServer();
@@ -125,10 +100,12 @@ app.post("/mcp", async (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.send("Gemini MCP-сервер работает. MCP-эндпоинт: /mcp");
+  res.send(
+    "Pollinations MCP-сервер работает. MCP-эндпоинт: /mcp. Ключи не нужны."
+  );
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Gemini MCP-сервер запущен на порту ${PORT}`);
+  console.log(`Pollinations MCP-сервер запущен на порту ${PORT}`);
 });
